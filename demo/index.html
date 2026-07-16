@@ -1,0 +1,434 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>npm-bloat-detector — find the deps eating your bundle</title>
+    <meta
+      name="description"
+      content="A tiny CLI that measures the real on-disk size of every dependency and shows you the heaviest ones — with a CI budget gate and baseline diffing."
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;800&family=JetBrains+Mono:wght@400;500;700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --bg: #07070c;
+        --ink: #f4f4f7;
+        --accent: #a78bfa;
+        --accent-2: #f0abfc;
+        --muted: #9a9ab0;
+        --card: #101019;
+        --border: #23232f;
+        --term-bg: #0b0b13;
+        --plus: #f87171;
+        --minus: #4ade80;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        scroll-behavior: smooth;
+      }
+
+      body {
+        margin: 0;
+        background: radial-gradient(1200px 600px at 50% -10%, #17172a 0%, var(--bg) 60%);
+        color: var(--ink);
+        font-family: 'Inter', system-ui, sans-serif;
+        line-height: 1.6;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      a {
+        color: var(--accent);
+        text-decoration: none;
+      }
+      a:hover {
+        text-decoration: underline;
+      }
+
+      .wrap {
+        max-width: 900px;
+        margin: 0 auto;
+        padding: 0 24px;
+      }
+
+      /* Hero */
+      header {
+        padding: 96px 0 56px;
+        text-align: center;
+      }
+
+      .kicker {
+        display: inline-block;
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.85rem;
+        letter-spacing: 0.02em;
+        color: var(--accent);
+        background: rgba(167, 139, 250, 0.1);
+        border: 1px solid rgba(167, 139, 250, 0.3);
+        border-radius: 999px;
+        padding: 6px 14px;
+        margin-bottom: 24px;
+      }
+
+      h1 {
+        font-size: clamp(2.1rem, 6vw, 3.6rem);
+        line-height: 1.08;
+        font-weight: 800;
+        letter-spacing: -0.02em;
+        margin: 0 0 20px;
+        color: var(--ink);
+      }
+
+      .grad {
+        background: linear-gradient(90deg, var(--accent), var(--accent-2));
+        -webkit-background-clip: text;
+        background-clip: text;
+        -webkit-text-fill-color: transparent;
+        color: var(--accent);
+      }
+
+      .lede {
+        font-size: 1.15rem;
+        color: var(--muted);
+        max-width: 620px;
+        margin: 0 auto 32px;
+      }
+
+      .cta {
+        display: flex;
+        gap: 12px;
+        justify-content: center;
+        flex-wrap: wrap;
+        align-items: stretch;
+      }
+
+      .install-cmd {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.95rem;
+        color: var(--ink);
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 12px 18px;
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .install-cmd .prompt {
+        color: var(--accent);
+      }
+
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        font-weight: 600;
+        font-size: 0.95rem;
+        color: #0b0b13;
+        background: var(--accent);
+        border-radius: 10px;
+        padding: 12px 20px;
+        border: 1px solid var(--accent);
+      }
+      .btn:hover {
+        text-decoration: none;
+        filter: brightness(1.08);
+      }
+
+      /* Terminal */
+      .terminal {
+        margin: 8px 0 64px;
+        background: var(--term-bg);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        overflow: hidden;
+        box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
+      }
+
+      .term-bar-top {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 12px 16px;
+        border-bottom: 1px solid var(--border);
+        background: #0e0e18;
+      }
+      .dot {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        display: inline-block;
+      }
+      .dot.r {
+        background: #ff5f57;
+      }
+      .dot.y {
+        background: #febc2e;
+      }
+      .dot.g {
+        background: #28c840;
+      }
+      .term-title {
+        margin-left: 8px;
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.8rem;
+        color: var(--muted);
+      }
+
+      pre.term {
+        margin: 0;
+        padding: 20px 22px;
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.86rem;
+        line-height: 1.7;
+        color: var(--ink);
+        overflow-x: auto;
+      }
+      .term-cmd {
+        color: var(--ink);
+      }
+      .term-cmd .prompt {
+        color: var(--accent);
+      }
+      .term-head {
+        color: var(--accent);
+        font-weight: 700;
+      }
+      .term-out {
+        color: var(--ink);
+      }
+      .term-bar-fill {
+        color: var(--accent);
+      }
+      .term-bar-empty {
+        color: #35354a;
+      }
+      .term-size {
+        color: #e6e6ef;
+        font-weight: 700;
+      }
+      .term-name {
+        color: var(--ink);
+      }
+      .term-total {
+        color: var(--muted);
+      }
+      .term-delta-plus {
+        color: var(--plus);
+      }
+      .term-delta-minus {
+        color: var(--minus);
+      }
+      .cursor {
+        display: inline-block;
+        width: 9px;
+        height: 1.05em;
+        background: var(--accent);
+        vertical-align: text-bottom;
+        animation: blink 1.1s steps(1) infinite;
+      }
+      @keyframes blink {
+        50% {
+          opacity: 0;
+        }
+      }
+
+      /* Cards */
+      .cards {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 16px;
+        margin: 0 0 64px;
+      }
+      @media (max-width: 720px) {
+        .cards {
+          grid-template-columns: 1fr;
+        }
+      }
+      .card {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: 22px;
+      }
+      .card h3 {
+        margin: 0 0 8px;
+        font-size: 1.05rem;
+        color: var(--ink);
+      }
+      .card p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 0.95rem;
+      }
+      .card .icon {
+        font-size: 1.3rem;
+        margin-bottom: 12px;
+        display: block;
+      }
+
+      /* Sections */
+      section {
+        margin-bottom: 64px;
+      }
+      h2 {
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: var(--ink);
+        margin: 0 0 18px;
+      }
+
+      .code-block {
+        background: var(--term-bg);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 18px 20px;
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.9rem;
+        color: var(--ink);
+        overflow-x: auto;
+      }
+      .code-block .prompt {
+        color: var(--accent);
+        user-select: none;
+      }
+      .code-block .comment {
+        color: var(--muted);
+      }
+      .code-block .line {
+        display: block;
+        white-space: pre;
+      }
+
+      /* Footer */
+      footer {
+        border-top: 1px solid var(--border);
+        padding: 32px 0 56px;
+        text-align: center;
+        color: var(--muted);
+        font-size: 0.9rem;
+      }
+      footer a {
+        color: var(--accent);
+      }
+      footer .sep {
+        color: var(--border);
+        margin: 0 10px;
+      }
+
+      :focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 3px;
+        border-radius: 6px;
+      }
+    </style>
+  </head>
+  <body>
+    <a class="skip-link" href="#content" style="position: absolute; left: -9999px; color: var(--ink)"
+      >Skip to content</a
+    >
+    <div class="wrap" id="content">
+      <header>
+        <span class="kicker">npm-bloat-detector</span>
+        <h1>Find the 5 deps <span class="grad">eating your bundle</span></h1>
+        <p class="lede">
+          A tiny CLI that walks your <code>node_modules</code>, measures the real on-disk size of
+          every dependency, and ranks the heaviest — so you know exactly what to trim before it ships.
+        </p>
+        <div class="cta">
+          <span class="install-cmd"
+            ><span class="prompt">$</span> pnpm add -g npm-bloat-detector</span
+          >
+          <a class="btn" href="https://github.com/kea0811/npm-bloat-detector">View on GitHub →</a>
+        </div>
+      </header>
+
+      <main>
+        <div class="terminal" aria-label="Example terminal output">
+          <div class="term-bar-top" aria-hidden="true">
+            <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+            <span class="term-title">npm-bloat-detector — ~/apps/web</span>
+          </div>
+          <pre class="term"><span class="term-cmd"><span class="prompt">$</span> npx npm-bloat-detector --baseline .bloat.json</span>
+<span class="term-head">Top 5 of 47 dependencies by installed size</span>
+<span class="term-out"><span class="term-bar-fill">████████████████████</span>   <span class="term-size">9.4 MB</span>  <span class="term-name">next</span>       <span class="term-delta-plus">+1.2 MB</span></span>
+<span class="term-out"><span class="term-bar-fill">██████████</span><span class="term-bar-empty">░░░░░░░░░░</span>   <span class="term-size">4.8 MB</span>  <span class="term-name">typescript</span></span>
+<span class="term-out"><span class="term-bar-fill">████████</span><span class="term-bar-empty">░░░░░░░░░░░░</span>   <span class="term-size">3.9 MB</span>  <span class="term-name">@swc/core</span></span>
+<span class="term-out"><span class="term-bar-fill">███</span><span class="term-bar-empty">░░░░░░░░░░░░░░░░░</span>   <span class="term-size">1.6 MB</span>  <span class="term-name">react-dom</span>  <span class="term-delta-minus">-240 KB</span></span>
+<span class="term-out"><span class="term-bar-fill">██</span><span class="term-bar-empty">░░░░░░░░░░░░░░░░░░</span>   <span class="term-size">1.1 MB</span>  <span class="term-name">date-fns</span></span>
+<span class="term-total">Total: 38.2 MB across 47 deps</span>
+<span class="cursor" aria-hidden="true"></span></pre>
+        </div>
+
+        <div class="cards">
+          <div class="card">
+            <span class="icon" aria-hidden="true">⚖️</span>
+            <h3>Real bytes, not estimates</h3>
+            <p>
+              It reads the actual files on disk and resolves pnpm/npm install symlinks — no registry
+              guesses, no rough approximations.
+            </p>
+          </div>
+          <div class="card">
+            <span class="icon" aria-hidden="true">🔍</span>
+            <h3>Diff against a baseline</h3>
+            <p>
+              Save a snapshot, then see the exact byte delta per dependency — red when it grows,
+              green when it shrinks.
+            </p>
+          </div>
+          <div class="card">
+            <span class="icon" aria-hidden="true">🚦</span>
+            <h3>Budget gate for CI</h3>
+            <p>
+              Set <code>--budget 50mb</code> and it exits non-zero when your install blows past the
+              limit — one line in your pipeline.
+            </p>
+          </div>
+        </div>
+
+        <section id="install">
+          <h2>Install</h2>
+          <div class="code-block">
+            <span class="line"><span class="prompt">$</span> pnpm add -g npm-bloat-detector</span>
+            <span class="line"><span class="comment"># or run it once, no install:</span></span>
+            <span class="line"><span class="prompt">$</span> pnpm dlx npm-bloat-detector</span>
+          </div>
+        </section>
+
+        <section id="uses">
+          <h2>Common uses</h2>
+          <div class="code-block">
+            <span class="line"><span class="comment"># the top 5 heaviest dependencies in the current project</span></span>
+            <span class="line"><span class="prompt">$</span> npm-bloat-detector</span>
+            <span class="line"> </span>
+            <span class="line"><span class="comment"># show the top 10, dev dependencies included</span></span>
+            <span class="line"><span class="prompt">$</span> npm-bloat-detector --top 10 --dev</span>
+            <span class="line"> </span>
+            <span class="line"><span class="comment"># fail CI when the install exceeds a budget</span></span>
+            <span class="line"><span class="prompt">$</span> npm-bloat-detector --budget 50mb</span>
+            <span class="line"> </span>
+            <span class="line"><span class="comment"># snapshot now, diff on the next run</span></span>
+            <span class="line"><span class="prompt">$</span> npm-bloat-detector --save .bloat.json</span>
+            <span class="line"><span class="prompt">$</span> npm-bloat-detector --baseline .bloat.json</span>
+          </div>
+        </section>
+      </main>
+
+      <footer>
+        <span>MIT licensed</span>
+        <span class="sep" aria-hidden="true">·</span>
+        <a href="https://github.com/kea0811/npm-bloat-detector">GitHub</a>
+        <span class="sep" aria-hidden="true">·</span>
+        <span>Built by <a href="https://github.com/kea0811">kea0811</a></span>
+      </footer>
+    </div>
+  </body>
+</html>
